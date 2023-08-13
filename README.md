@@ -1,4 +1,4 @@
-# mach-core 'getting started' project
+# mach-core starter project
 
 We walked through the [mach-core getting started guide](https://machengine.org/core/getting-started) and committed the result to this repository.
 
