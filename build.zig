@@ -16,8 +16,11 @@ pub fn build(b: *std.Build) !void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    mach_core.mach_glfw_import_path = "mach_core.mach_glfw";
-    const app = try mach_core.App.init(b, .{
+    const mach_core_dep = b.dependency("mach_core", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const app = try mach_core.App.init(b, mach_core_dep.builder, .{
         .name = "myapp",
         .src = "src/main.zig",
         .target = target,
