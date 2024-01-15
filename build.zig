@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) !void {
         .src = "src/main.zig",
         .target = target,
         .optimize = optimize,
-        .deps = &[_]std.build.ModuleDependency{},
+        .deps = &[_]std.Build.Module.Import{},
     });
     if (b.args) |args| app.run.addArgs(args);
 
