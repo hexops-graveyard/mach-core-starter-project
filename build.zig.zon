@@ -8,9 +8,9 @@
         "README.md",
     },
     .dependencies = .{
-        .mach_core = .{
-            .url = "https://pkg.machengine.org/mach-core/6a62bcc90e0d072d632788a6575d77942bd09a19.tar.gz",
-            .hash = "12209d39954fcda0be158461c10f64d14d5c7d097bd6d26785b332d75ffefa7dd7a0",
+        .mach = .{
+            .url = "https://pkg.machengine.org/mach/ea6a9438aa13ee83f9239d3aada352dcb9ea8b7c.tar.gz",
+            .hash = "1220a1ac8dba2fee590af6bafce6e1d5a768b93456e8877fe3d5402f19aec3d5d696",
         },
     },
 }

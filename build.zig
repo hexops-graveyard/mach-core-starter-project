@@ -1,5 +1,5 @@
 const std = @import("std");
-const mach_core = @import("mach_core");
+const mach = @import("mach");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -16,11 +16,15 @@ pub fn build(b: *std.Build) !void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const mach_core_dep = b.dependency("mach_core", .{
+    const mach_dep = b.dependency("mach", .{
         .target = target,
         .optimize = optimize,
+
+        // Since we're only using @import("mach").core, we can specify this to avoid
+        // pulling in unneccessary dependencies.
+        .core = true,
     });
-    const app = try mach_core.App.init(b, mach_core_dep.builder, .{
+    const app = try mach.CoreApp.init(b, mach_dep.builder, .{
         .name = "myapp",
         .src = "src/main.zig",
         .target = target,
