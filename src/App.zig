@@ -2,26 +2,31 @@ const std = @import("std");
 const mach = @import("mach");
 const gpu = mach.gpu;
 
-// Globally unique name of our module
 pub const name = .app;
-
 pub const Mod = mach.Mod(@This());
 
-pub const events = .{
-    .deinit = .{ .handler = deinit },
+pub const systems = .{
     .init = .{ .handler = init },
+    .after_init = .{ .handler = afterInit },
+    .deinit = .{ .handler = deinit },
     .tick = .{ .handler = tick },
 };
 
 pipeline: *gpu.RenderPipeline,
 
-fn deinit(core: *mach.Core.Mod) void {
-    core.send(.deinit, .{});
+pub fn deinit(core: *mach.Core.Mod, game: *Mod) void {
+    game.state().pipeline.release();
+    core.schedule(.deinit);
 }
 
-fn init(app: *Mod, core: *mach.Core.Mod) !void {
+fn init(game: *Mod, core: *mach.Core.Mod) !void {
+    core.schedule(.init);
+    game.schedule(.after_init);
+}
+
+fn afterInit(game: *Mod, core: *mach.Core.Mod) !void {
     // Create our shader module
-    const shader_module = mach.core.device.createShaderModuleWGSL("shader.wgsl", @embedFile("shader.wgsl"));
+    const shader_module = core.state().device.createShaderModuleWGSL("shader.wgsl", @embedFile("shader.wgsl"));
     defer shader_module.release();
 
     // Blend state describes how rendered colors get blended
@@ -29,7 +34,7 @@ fn init(app: *Mod, core: *mach.Core.Mod) !void {
 
     // Color target describes e.g. the pixel format of the window we are rendering to.
     const color_target = gpu.ColorTargetState{
-        .format = mach.core.descriptor.format,
+        .format = core.get(core.state().main_window, .framebuffer_format).?,
         .blend = &blend,
     };
 
@@ -41,32 +46,31 @@ fn init(app: *Mod, core: *mach.Core.Mod) !void {
     });
 
     // Create our render pipeline that will ultimately get pixels onto the screen.
+    const label = @tagName(name) ++ ".init";
     const pipeline_descriptor = gpu.RenderPipeline.Descriptor{
+        .label = label,
         .fragment = &fragment,
         .vertex = gpu.VertexState{
             .module = shader_module,
             .entry_point = "vertex_main",
         },
     };
-    const pipeline = mach.core.device.createRenderPipeline(&pipeline_descriptor);
+    const pipeline = core.state().device.createRenderPipeline(&pipeline_descriptor);
 
     // Store our render pipeline in our module's state, so we can access it later on.
-    app.init(.{
+    game.init(.{
         .pipeline = pipeline,
     });
 
-    core.send(.start, .{});
+    // Start the loop so we get .tick events
+    core.schedule(.start);
 }
 
-pub fn tick(
-    core: *mach.Core.Mod,
-    app: *Mod,
-) !void {
-    // Poll for input events
+fn tick(core: *mach.Core.Mod, game: *Mod) !void {
     var iter = mach.core.pollEvents();
     while (iter.next()) |event| {
         switch (event) {
-            .close => core.send(.exit, .{}), // tell mach.Core to exit the app
+            .close => core.schedule(.exit), // Tell mach.Core to exit the app
             else => {},
         }
     }
@@ -76,30 +80,36 @@ pub fn tick(
     defer back_buffer_view.release();
 
     // Create a command encoder
-    const encoder = mach.core.device.createCommandEncoder(null);
+    const label = @tagName(name) ++ ".tick";
+    const encoder = core.state().device.createCommandEncoder(&.{ .label = label });
     defer encoder.release();
 
-    const sky_blue = gpu.Color{ .r = 0.776, .g = 0.988, .b = 1, .a = 1 };
-    const color_attachment = gpu.RenderPassColorAttachment{
+    // Begin render pass
+    const sky_blue_background = gpu.Color{ .r = 0.776, .g = 0.988, .b = 1, .a = 1 };
+    const color_attachments = [_]gpu.RenderPassColorAttachment{.{
         .view = back_buffer_view,
-        .clear_value = sky_blue,
+        .clear_value = sky_blue_background,
         .load_op = .clear,
         .store_op = .store,
-    };
-    const render_pass_info = gpu.RenderPassDescriptor.init(.{
-        .color_attachments = &.{color_attachment},
-    });
-    const pass = encoder.beginRenderPass(&render_pass_info);
-    defer pass.release();
-    pass.setPipeline(app.state().pipeline);
-    pass.draw(3, 1, 0, 0);
-    pass.end();
+    }};
+    const render_pass = encoder.beginRenderPass(&gpu.RenderPassDescriptor.init(.{
+        .label = label,
+        .color_attachments = &color_attachments,
+    }));
+    defer render_pass.release();
 
-    // Submit our encoded commands to the GPU queue
-    var command = encoder.finish(null);
+    // Draw
+    render_pass.setPipeline(game.state().pipeline);
+    render_pass.draw(3, 1, 0, 0);
+
+    // Finish render pass
+    render_pass.end();
+
+    // Submit our commands to the queue
+    var command = encoder.finish(&.{ .label = label });
     defer command.release();
-    mach.core.queue.submit(&[_]*gpu.CommandBuffer{command});
+    core.state().queue.submit(&[_]*gpu.CommandBuffer{command});
 
     // Present the frame
-    core.send(.present_frame, .{});
+    core.schedule(.present_frame);
 }
